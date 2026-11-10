@@ -155,7 +155,9 @@ extension MDRRequest {
     }
 
     public static let equalizer: [UInt8] = [EqualizerCommand.getParam, EqualizerCommand.presetType]
-    public static let equalizerAvailability: [UInt8] = [EqualizerCommand.getStatus, EqualizerCommand.presetType]
+    public static func equalizerAvailability(_ variant: EqualizerVariant) -> [UInt8] {
+        [EqualizerCommand.getStatus, variant.rawValue]
+    }
 
     /// Selects a preset; the headphones then use that preset's own bands.
     public static func selectEqualizerPreset(_ id: UInt8) -> [UInt8] {

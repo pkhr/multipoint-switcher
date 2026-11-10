@@ -161,6 +161,7 @@ protocol called "MDR". Sound Connect uses it for everything, including the devic
 | Noise control get / set (table 1) | `66 19` / `68 19 <settled> <on> <ambient> <voice> <level> <auto> <sensitivity>` |
 | Equalizer presets and band layout (table 1) | `50 04 01` → `51 04 <bands> <steps> <count> {id len name}…` |
 | Equalizer get / set (table 1) | `56 00` → `57 00 <preset> <count> <step>…` / `58 00 <preset> <count> <step>…` (count 0 selects a preset) |
+| Equalizer available right now? (table 1) | `52 04` → `53 04 <00 = yes> <reasons…>`; asked as `52 00`, The ColleXion doesn't answer |
 
 In the settings messages, `00` means on and `01` off; noise control is the usual way round (`01` on). `19` is the
 noise-control layout of the XM6 and The ColleXion; the XM5's is `17`, without the last two bytes.
@@ -191,9 +192,9 @@ This app reimplements a small subset in Swift, so there's no C++ toolchain or de
 ## Notes
 
 - Tested live on a 1000X The ColleXion (firmware 1.3.0) on macOS 27: listing the devices, switching the source both
-  ways, reading and writing the auto-switch and microphone settings, reading noise control, and connecting on
-  demand. The iPhone app connects to them too. Writing noise control, and the whole equalizer, have so far only run
-  against the simulated headphones.
+  ways, reading and writing the auto-switch and microphone settings, reading noise control and the equalizer, and
+  connecting on demand. The iPhone app connects to them too. Writing noise control has so far only run against the
+  simulated headphones.
 - macOS quirk: IOBluetooth silently drops an RFCOMM open that's sent before its internal session reports
   "powered on", right after a process starts. `BluetoothLink` waits briefly before the first open and retries opens
   that never complete.

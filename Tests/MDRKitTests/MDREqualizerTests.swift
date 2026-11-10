@@ -60,7 +60,21 @@ final class MDREqualizerTests: XCTestCase {
     func testAvailability() {
         XCTAssertEqual(MDRParser.parseT1(hex("53 00 00 00")), .equalizerAvailable(true))
         XCTAssertEqual(MDRParser.parseT1(hex("55 00 01 01 00")), .equalizerAvailable(false)) // unavailable: in a call
-        XCTAssertEqual(MDRRequest.equalizerAvailability, hex("52 00"))
+        XCTAssertEqual(MDRRequest.equalizerAvailability(.customizableWithReasons), hex("52 04"))
+    }
+
+    /// Replies captured from a 1000X The ColleXion (firmware 1.3.0).
+    func testRealColleXionEqualizer() {
+        guard case let .equalizerInfo(real)? = MDRParser.parseT1(hex("51 04 0A 0D 09 00 00 30 00 31 00 32 00 33 00 20 00 A0 00 A1 00 A2 00")) else {
+            return XCTFail()
+        }
+        XCTAssertEqual(real.bandCount, 10)
+        XCTAssertEqual(real.levels, -6...6)
+        XCTAssertEqual(real.presets.map(\.title), ["Off", "Heavy", "Clear", "Hard", "Soft", "Gaming", "Manual", "Custom 1", "Custom 2"])
+        guard case let .equalizer(value)? = MDRParser.parseT1(hex("57 00 A1 0A 05 05 06 06 06 06 06 06 07 07")) else { return XCTFail() }
+        XCTAssertEqual(real.preset(value.presetID)?.title, "Custom 1")
+        XCTAssertEqual(value.levels(in: real), [-1, -1, 0, 0, 0, 0, 0, 0, 1, 1])
+        XCTAssertEqual(MDRParser.parseT1(hex("53 04 00 00")), .equalizerAvailable(true))
     }
 
     func testPresetTitles() {

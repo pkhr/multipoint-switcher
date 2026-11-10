@@ -126,16 +126,21 @@ public final class HeadphoneSession: HeadphoneTransportDelegate {
             }
         }
         // Last, so that if these headphones turn out not to answer, nothing else waits behind it.
-        if scope.contains(.equalizer), capabilities.equalizer != nil {
+        // Whether the equalizer is available is asked under the type the headphones advertise; they ignore the
+        // question otherwise. It's a nicety, so a model that doesn't answer it doesn't fail the whole read.
+        var optional: Set<[UInt8]> = []
+        if scope.contains(.equalizer), let equalizer = capabilities.equalizer {
             requests.append((MDRDataType.table1, MDRRequest.equalizer, Self.isEqualizerReply(0x57)))
-            requests.append((MDRDataType.table1, MDRRequest.equalizerAvailability, Self.isEqualizerReply(0x53)))
+            let availability = MDRRequest.equalizerAvailability(equalizer.variant)
+            requests.append((MDRDataType.table1, availability, Self.isEqualizerReply(0x53)))
+            optional.insert(availability)
         }
         guard !requests.isEmpty else { completion?(true); return }
         var allAnswered = true
         for (position, request) in requests.enumerated() {
             let isLast = position == requests.count - 1
             send(request.table, request.payload, reply: request.reply, key: "get \(request.table) \(request.payload)") { ok in
-                allAnswered = allAnswered && ok
+                allAnswered = allAnswered && (ok || optional.contains(request.payload))
                 if isLast { completion?(allAnswered) }
             }
         }

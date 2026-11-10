@@ -16,10 +16,14 @@ public final class SimulatedHeadphones: HeadphoneTransport {
         /// The equalizer: the selected preset, and the ten bands of each preset (0…12, 6 is flat).
         public var equalizerPreset: UInt8 = 0x00
         public var equalizerBands: [UInt8: [UInt8]] = [
-            0x00: [6, 6, 6, 6, 6, 6, 6, 6, 6, 6], 0x10: [5, 5, 6, 6, 7, 8, 9, 10, 11, 11], 0x11: [10, 9, 7, 6, 6, 7, 8, 9, 10, 10],
-            0x12: [7, 7, 6, 6, 5, 5, 4, 4, 3, 3], 0x13: [5, 5, 5, 6, 6, 6, 5, 5, 4, 4], 0x14: [5, 5, 6, 7, 9, 10, 9, 8, 7, 6],
-            0x16: [12, 11, 9, 7, 6, 6, 6, 6, 6, 6], 0xA0: [6, 6, 6, 6, 6, 6, 6, 6, 6, 6], 0xA1: [8, 7, 6, 6, 6, 6, 6, 7, 8, 8],
+            0x00: [6, 6, 6, 6, 6, 6, 6, 6, 6, 6], 0x30: [12, 11, 9, 7, 6, 6, 6, 6, 6, 6], 0x31: [5, 5, 6, 6, 7, 8, 9, 10, 11, 11],
+            0x32: [10, 9, 7, 6, 6, 7, 8, 9, 10, 10], 0x33: [7, 7, 6, 6, 5, 5, 4, 4, 3, 3], 0x20: [5, 5, 6, 7, 9, 10, 9, 8, 7, 6],
+            0xA0: [6, 6, 6, 6, 6, 6, 6, 6, 6, 6], 0xA1: [5, 5, 6, 6, 6, 6, 6, 6, 7, 7], 0xA2: [6, 6, 6, 6, 6, 6, 6, 6, 6, 6],
         ]
+        /// The presets in the order the headphones list them: Off, Heavy, Clear, Hard, Soft, Gaming, Manual, Custom 1, 2.
+        public static let equalizerPresets: [UInt8] = [0x00, 0x30, 0x31, 0x32, 0x33, 0x20, 0xA0, 0xA1, 0xA2]
+        /// Answer the "is the equalizer available" question; some models never do.
+        public var answersEqualizerAvailability = true
         public var playbackSlot: UInt8 = 1
         public var tabletSlot: UInt8 = 0
         /// A SourceSwitchResult code to answer switch requests with, instead of switching.
@@ -97,14 +101,10 @@ public final class SimulatedHeadphones: HeadphoneTransport {
             case (0x00, _): return [[0x01, 0x00, 0x03, 0x00, 0x10, 0x02, 0x00, 0x00]]
             case (0x06, _): return [[0x07, 0x00, 0x06, 0x6D, 0x0B, 0xFC, 0x0D, 0xD1, 0x3F, 0xD3, 0x2D, 0x69, 0x2E, 0x57, 0x14]]
             case (0x50, 0x04):
-                // Ten bands of thirteen steps. Names are left empty or sent as identifiers, as real firmware may.
-                var reply: [UInt8] = [0x51, 0x04, 10, 13, UInt8(memory.equalizerBands.count)]
-                for id in memory.equalizerBands.keys.sorted() {
-                    let name = id == 0x16 ? Array("EQ_BASS_BOOST".utf8) : []
-                    reply += [id, UInt8(name.count)] + name
-                }
-                return [reply]
-            case (0x52, 0x00): return [[0x53, 0x00, 0x00, 0x00]]
+                // Ten bands of thirteen steps, and presets without names, as the real headphones answer.
+                return [[0x51, 0x04, 10, 13, UInt8(Memory.equalizerPresets.count)] + Memory.equalizerPresets.flatMap { [$0, 0x00] }]
+            // Asked under 0x00 instead, the real headphones say nothing.
+            case (0x52, 0x04): return memory.answersEqualizerAvailability ? [[0x53, 0x04, 0x00, 0x00]] : []
             case (0x56, 0x00): return [equalizerReply(0x57)]
             case (0x58, 0x00):
                 guard p.count >= 4, memory.equalizerBands[p[2]] != nil else { return [] }

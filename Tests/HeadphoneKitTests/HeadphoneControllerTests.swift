@@ -199,15 +199,15 @@ final class HeadphoneControllerTests: XCTestCase {
         let info = try! XCTUnwrap(controller.capabilities?.equalizer)
         XCTAssertEqual(info.bandCount, 10)
         XCTAssertEqual(info.levels, -6...6)
-        XCTAssertEqual(info.preset(0x16)?.title, "Bass Boost")
+        XCTAssertEqual(info.presets.map(\.title), ["Off", "Heavy", "Clear", "Hard", "Soft", "Gaming", "Manual", "Custom 1", "Custom 2"])
         XCTAssertEqual(controller.status.equalizer, Equalizer(presetID: 0x00, steps: [UInt8](repeating: 6, count: 10)))
         XCTAssertEqual(controller.status.equalizerAvailable, true)
 
         // A preset shows at once; its bands arrive with the headphones' answer.
-        controller.selectEqualizerPreset(0x16)
-        XCTAssertEqual(controller.status.equalizer?.presetID, 0x16)
+        controller.selectEqualizerPreset(0x30)
+        XCTAssertEqual(controller.status.equalizer?.presetID, 0x30)
         await wait("preset's bands") { controller.status.equalizer?.steps.first == 12 }
-        XCTAssertEqual(memory.equalizerPreset, 0x16)
+        XCTAssertEqual(memory.equalizerPreset, 0x30)
 
         // Moving a band of a fixed preset starts a custom one from where the bands are.
         controller.setEqualizerLevel(-2, band: 0, adjusting: true)
@@ -216,9 +216,18 @@ final class HeadphoneControllerTests: XCTestCase {
         await wait("written") { self.memory.equalizerBands[0xA0]?.first == 2 }
         XCTAssertEqual(memory.equalizerPreset, 0xA0)
         XCTAssertEqual(memory.equalizerBands[0xA0], [2, 11, 9, 7, 6, 6, 6, 6, 6, 6])
-        XCTAssertEqual(memory.equalizerBands[0x16]?.first, 12, "the fixed preset itself is untouched")
+        XCTAssertEqual(memory.equalizerBands[0x30]?.first, 12, "the fixed preset itself is untouched")
         await wait("released") { controller.link == .idle }
         XCTAssertEqual(controller.status.equalizer, Equalizer(presetID: 0xA0, steps: [2, 11, 9, 7, 6, 6, 6, 6, 6, 6]))
+    }
+
+    func testHeadphonesThatDontSayWhetherTheEqualizerIsAvailable() async {
+        memory.answersEqualizerAvailability = false
+        let controller = makeController()
+        let failure = await sync(controller, .equalizer)
+        XCTAssertNil(failure, "the read still counts")
+        XCTAssertEqual(controller.status.equalizer?.presetID, 0x00)
+        XCTAssertNil(controller.status.equalizerAvailable)
     }
 
     func testCapabilitiesSavedBeforeTheEqualizerAreToppedUp() async {
