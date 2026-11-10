@@ -144,6 +144,10 @@ public enum T1Message: Equatable, Sendable {
     case speakToChatDetail(SpeakToChatDetail)
     /// `adjusting` is true while the level is still being changed (a slider being dragged in another app).
     case noiseControl(NoiseControl, adjusting: Bool)
+    case equalizerInfo(EqualizerInfo)
+    case equalizer(Equalizer)
+    /// Whether the equalizer can be used right now; it can't during a call, for one.
+    case equalizerAvailable(Bool)
     case other(command: UInt8)
 }
 
@@ -182,6 +186,15 @@ extension MDRParser {
         case NoiseCommand.retParam, NoiseCommand.notifyParam:
             guard let (value, adjusting) = readNoiseControl(&reader) else { return .other(command: command) }
             return .noiseControl(value, adjusting: adjusting)
+
+        case EqualizerCommand.retCapability:
+            return readEqualizerInfo(&reader).map(T1Message.equalizerInfo) ?? .other(command: command)
+
+        case EqualizerCommand.retParam, EqualizerCommand.notifyParam:
+            return readEqualizer(&reader).map(T1Message.equalizer) ?? .other(command: command)
+
+        case EqualizerCommand.retStatus, EqualizerCommand.notifyStatus:
+            return readEqualizerAvailability(&reader).map(T1Message.equalizerAvailable) ?? .other(command: command)
 
         default:
             return .other(command: command)

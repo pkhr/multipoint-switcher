@@ -37,12 +37,24 @@ final class HeadphoneStore: HeadphoneCommandHandling {
     private init() {
         #if targetEnvironment(simulator)
         simulated = SimulatedHeadphones.Memory()
+        if let preset = ProcessInfo.processInfo.environment["SIMULATED_EQ"].flatMap({ UInt8($0, radix: 16) }) {
+            simulated?.equalizerPreset = preset
+        }
         if ProcessInfo.processInfo.environment["SIMULATED_NOISE"] == "ambient" {
             simulated?.noise = [0x01, 0x01, 0x01, 0x00, 0x0C, 0x00, 0x00]
         }
         #endif
         headphonesName = SharedState.headphonesName
-        controller = HeadphoneController(snapshot: SharedState.snapshot) { [weak self] in self?.makeTransport() }
+        // What the headphones can do is remembered between launches to keep connections short. A new version of
+        // the app may know about more of it (or the headphones' firmware may), so ask again after an update.
+        var snapshot = SharedState.snapshot
+        let info = Bundle.main.infoDictionary
+        let version = "\(info?["CFBundleShortVersionString"] as? String ?? "") (\(info?["CFBundleVersion"] as? String ?? ""))"
+        if SharedState.capabilitiesVersion != version {
+            snapshot?.capabilities = nil
+            SharedState.capabilitiesVersion = version
+        }
+        controller = HeadphoneController(snapshot: snapshot) { [weak self] in self?.makeTransport() }
         controller.onChange = { [weak self] in self?.controllerChanged() }
         controller.onNotice = { [weak self] in self?.notice = $0 }
         status = controller.status
@@ -156,6 +168,8 @@ final class HeadphoneStore: HeadphoneCommandHandling {
     func setSpeakToChat(_ on: Bool) { controller.setSpeakToChat(on) }
     func setSpeakToChatDetail(_ detail: SpeakToChatDetail) { controller.setSpeakToChatDetail(detail) }
     func setMicMute(_ settings: MicMuteSettings) { controller.setMicMute(settings) }
+    func selectEqualizerPreset(_ id: UInt8) { controller.selectEqualizerPreset(id) }
+    func setEqualizerLevel(_ level: Int, band: Int, adjusting: Bool) { controller.setEqualizerLevel(level, band: band, adjusting: adjusting) }
 
     // MARK: Commands from controls, Shortcuts and Siri
 
@@ -261,6 +275,28 @@ final class HeadphoneStore: HeadphoneCommandHandling {
             let now = controller.status.speakToChatDetail ?? detail
             return step == .chatSensitivity ? now.sensitivity.title : now.timeout.title
         }
+    }
+
+    func setEqualizerPreset(id: UInt8) async throws -> String {
+        try await sync(.equalizer)
+        guard let info = controller.capabilities?.equalizer else { throw HeadphoneError("These headphones don't offer an equalizer.") }
+        guard let preset = info.preset(id) else { throw HeadphoneError("The headphones don't have that preset.") }
+        guard controller.status.equalizerAvailable != false else {
+            throw HeadphoneError("The headphones won't change the equalizer right now.")
+        }
+        controller.selectEqualizerPreset(id)
+        try await sync(.equalizer) // queued behind the write, so this is the headphones' answer
+        guard controller.status.equalizer?.presetID == id else { throw HeadphoneError("The headphones didn't change the equalizer.") }
+        return preset.title
+    }
+
+    func cycleEqualizerPreset() async throws -> String {
+        try await sync(.equalizer)
+        guard let presets = controller.capabilities?.equalizer?.presets, !presets.isEmpty else {
+            throw HeadphoneError("These headphones don't offer an equalizer.")
+        }
+        let current = presets.firstIndex { $0.id == controller.status.equalizer?.presetID } ?? -1
+        return try await setEqualizerPreset(id: presets[(current + 1) % presets.count].id)
     }
 
     func setDevice(address: String, connected: Bool) async throws {

@@ -193,6 +193,52 @@ final class HeadphoneControllerTests: XCTestCase {
         XCTAssertEqual(failure, "The headphones aren't connected to this device")
     }
 
+    func testEqualizerPresetsAndBands() async {
+        let controller = makeController()
+        _ = await sync(controller)
+        let info = try! XCTUnwrap(controller.capabilities?.equalizer)
+        XCTAssertEqual(info.bandCount, 10)
+        XCTAssertEqual(info.levels, -6...6)
+        XCTAssertEqual(info.preset(0x16)?.title, "Bass Boost")
+        XCTAssertEqual(controller.status.equalizer, Equalizer(presetID: 0x00, steps: [UInt8](repeating: 6, count: 10)))
+        XCTAssertEqual(controller.status.equalizerAvailable, true)
+
+        // A preset shows at once; its bands arrive with the headphones' answer.
+        controller.selectEqualizerPreset(0x16)
+        XCTAssertEqual(controller.status.equalizer?.presetID, 0x16)
+        await wait("preset's bands") { controller.status.equalizer?.steps.first == 12 }
+        XCTAssertEqual(memory.equalizerPreset, 0x16)
+
+        // Moving a band of a fixed preset starts a custom one from where the bands are.
+        controller.setEqualizerLevel(-2, band: 0, adjusting: true)
+        controller.setEqualizerLevel(-4, band: 0)
+        XCTAssertEqual(controller.status.equalizer?.presetID, 0xA0)
+        await wait("written") { self.memory.equalizerBands[0xA0]?.first == 2 }
+        XCTAssertEqual(memory.equalizerPreset, 0xA0)
+        XCTAssertEqual(memory.equalizerBands[0xA0], [2, 11, 9, 7, 6, 6, 6, 6, 6, 6])
+        XCTAssertEqual(memory.equalizerBands[0x16]?.first, 12, "the fixed preset itself is untouched")
+        await wait("released") { controller.link == .idle }
+        XCTAssertEqual(controller.status.equalizer, Equalizer(presetID: 0xA0, steps: [2, 11, 9, 7, 6, 6, 6, 6, 6, 6]))
+    }
+
+    func testCapabilitiesSavedBeforeTheEqualizerAreToppedUp() async {
+        let first = makeController()
+        _ = await sync(first)
+        var old = first.snapshot
+        old.capabilities?.equalizer = nil
+        old.capabilities?.equalizerProbed = nil
+        old.status.equalizer = nil
+
+        let second = makeController(snapshot: old)
+        _ = await sync(second, .equalizer)
+        XCTAssertEqual(second.capabilities?.equalizer?.bandCount, 10)
+        XCTAssertEqual(second.capabilities?.equalizerProbed, true)
+        XCTAssertEqual(second.status.equalizer?.presetID, 0x00)
+        // Only the equalizer was asked about, not the whole handshake again.
+        XCTAssertTrue(headphones[1].received(0x06, table: MDRDataType.table1).isEmpty)
+        XCTAssertEqual(headphones[1].received(0x50, table: MDRDataType.table1).count, 1)
+    }
+
     func testTogglesWriteAndConfirm() async {
         let controller = makeController()
         _ = await sync(controller)

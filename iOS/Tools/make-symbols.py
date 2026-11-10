@@ -204,6 +204,13 @@ def clock(p, x, y, s, t=4.8):
     line(p, x, y, x + s * 0.19, y + s * 0.09, t)
 
 
+def sliders(p, x, y, s, t=4.6):
+    # An equalizer: three bands, each with its knob at a different height.
+    for dx, knob in ((-0.36, 0.22), (0, -0.24), (0.36, 0.06)):
+        line(p, x + s * dx, y - s * 0.5, x + s * dx, y + s * 0.5, t)
+        p.circle(x + s * dx, y + s * knob, s * 0.15)
+
+
 def sound(p, x, y, s, t=5):
     p.circle(x - s * 0.38, y, s * 0.13)
     for radius in (s * 0.36, s * 0.66):
@@ -302,6 +309,7 @@ SYMBOLS = {
     "headphones.on.device": worn_by_other,
     "headphones.link": lambda: framed(link, 40),
     "headphones.swap": lambda: framed(swap, 32),
+    "headphones.eq": lambda: framed(sliders, 36),
     "headphones.mic": lambda: framed(mic, 40),
     "headphones.chat": lambda: framed(bubble, 32),
     "headphones.chat.level": lambda: badged(bubble, bars),

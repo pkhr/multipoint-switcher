@@ -29,6 +29,8 @@ struct NoiseControls: WidgetBundle {
         LessAmbientControl()
         AutoAmbientControl()
         FocusOnVoiceControl()
+        EqualizerControl()
+        EqualizerPresetControl()
     }
 }
 
@@ -177,6 +179,50 @@ struct FocusOnVoiceControl: ControlWidget {
     var body: some ControlWidgetConfiguration {
         switchControl(kind: "focus-on-voice", title: "Focus on Voice", glyph: "headphones.waves.voice", setting: .focusOnVoice,
                       description: "In ambient sound, let voices through while holding back other noise.")
+    }
+}
+
+// MARK: Equalizer
+
+/// The current preset's name, as last read; nil until the app has read the equalizer.
+private func equalizerPresetTitle(_ status: HeadphoneStatus) -> String? {
+    guard let id = status.equalizer?.presetID else { return nil }
+    return (SharedState.equalizerPresets.first { $0.id == id } ?? EqualizerPreset(id: id)).title
+}
+
+/// Shows the equalizer's preset; a tap moves to the next one.
+struct EqualizerControl: ControlWidget {
+    var body: some ControlWidgetConfiguration {
+        StaticControlConfiguration(kind: "dev.pkhri.Multipoint.equalizer", provider: StatusProvider()) { status in
+            ControlWidgetButton(action: CycleEqualizerPresetIntent()) {
+                Label(equalizerPresetTitle(status).map { "Equalizer · \($0)" } ?? "Equalizer", image: "headphones.eq")
+            }
+        }
+        .displayName("Equalizer")
+        .description("Shows the equalizer's preset. Tap for the next one.")
+    }
+}
+
+struct SelectEqualizerPresetIntent: ControlConfigurationIntent {
+    static let title: LocalizedStringResource = "Preset"
+    static let isDiscoverable = false
+
+    @Parameter(title: "Preset") var preset: EqualizerPresetEntity?
+}
+
+/// A button for one preset you choose; it says so while that preset is the one in use.
+struct EqualizerPresetControl: ControlWidget {
+    var body: some ControlWidgetConfiguration {
+        AppIntentControlConfiguration(kind: "dev.pkhri.Multipoint.equalizer-preset", intent: SelectEqualizerPresetIntent.self) { configuration in
+            let preset = configuration.preset
+            let inUse = preset?.presetID != nil && preset?.presetID == SharedState.status.equalizer?.presetID
+            ControlWidgetButton(action: SetEqualizerPresetIntent(preset: preset)) {
+                Label(preset.map { inUse ? "\($0.name) · In Use" : $0.name } ?? "Choose Preset", image: "headphones.eq")
+            }
+        }
+        .displayName("Equalizer Preset")
+        .description("Switch the equalizer to a preset you choose.")
+        .promptsForUserConfiguration()
     }
 }
 

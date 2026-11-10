@@ -416,6 +416,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 entries.append(Menu.info("reading", "Reading from the headphones…"))
             }
             entries += noiseControlSection(controller)
+            if let equalizer = equalizerMenu(controller) { entries.append(equalizer) }
             entries += sourceSection(controller)
             entries.append(microphoneMenu(controller))
         }
@@ -514,6 +515,37 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         entries.append(macAudioMenu())
         return entries
+    }
+
+    /// The equalizer: its presets, and a slider for each band.
+    private func equalizerMenu(_ controller: HeadphoneController) -> MenuEntry? {
+        guard let info = controller.capabilities?.equalizer, let value = controller.status.equalizer else { return nil }
+        let available = controller.status.equalizerAvailable != false
+        var entries: [MenuEntry] = []
+        if !available {
+            entries.append(Menu.info("unavailable", "The headphones won't change it right now", symbol: "exclamationmark.triangle"))
+        }
+        for preset in info.presets {
+            entries.append(Menu.view("preset.\(preset.id)", MenuRowView.init) { row in
+                row.configure(title: preset.title, accessory: preset.id == value.presetID ? .check : .none, enabled: available)
+                row.onClick = { controller.selectEqualizerPreset(preset.id) }
+            })
+        }
+        let levels = value.levels(in: info)
+        if info.isCustomizable, !levels.isEmpty {
+            entries.append(Menu.separator("sep.bands"))
+            let labels = info.bandLabels
+            for (band, level) in levels.enumerated() {
+                entries.append(Menu.view("band.\(band)", BandSliderView.init) { view in
+                    view.configure(name: band < labels.count ? labels[band] : "\(band + 1)", level: level, range: info.levels, enabled: available)
+                    view.toolTip = info.preset(value.presetID)?.isCustom == true ? nil
+                        : "Moving a band switches to \(info.customPreset?.title ?? "a custom preset"), starting from these levels."
+                    view.onChange = { level, adjusting in controller.setEqualizerLevel(level, band: band, adjusting: adjusting) }
+                })
+            }
+        }
+        let title = "Equalizer: \(info.preset(value.presetID)?.title ?? EqualizerPreset(id: value.presetID).title)"
+        return renderer.submenu("equalizer", title, entries)
     }
 
     private func toggleRow(_ key: String, _ title: String, on: Bool, enabled: Bool = true, toolTip: String? = nil,

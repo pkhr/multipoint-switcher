@@ -8,6 +8,10 @@ public struct HeadphoneCapabilities: Equatable, Codable, Sendable {
     public var supportedT2: Set<UInt8>
     /// The model-specific switches the headphones describe themselves, e.g. sidetone.
     public var generalSettings: [GeneralSettingInfo]
+    /// The equalizer's presets and bands; nil if the headphones have none, or didn't describe it.
+    public var equalizer: EqualizerInfo?
+    /// Whether the equalizer has been asked about. Nil in capabilities saved before the app knew to ask.
+    public var equalizerProbed: Bool?
 
     public init(supportedT1: Set<UInt8> = [], supportedT2: Set<UInt8> = [], generalSettings: [GeneralSettingInfo] = []) {
         self.supportedT1 = supportedT1
@@ -25,6 +29,7 @@ public struct HeadphoneCapabilities: Equatable, Codable, Sendable {
     public var sidetoneIndex: UInt8? { generalSettings.first(where: \.isSidetone)?.index }
     public var supportsSpeakToChat: Bool { supportedT1.contains(T1Function.speakToChat) }
     public var supportsMicMute: Bool { supportedT2.contains(T2Function.micMuteByHeadphones) }
+    public var equalizerVariant: EqualizerVariant? { EqualizerVariant(supported: supportedT1) }
 
     var pairingListType: PeripheralInquiredType {
         supportedT2.contains(T2Function.pairingWithClassOfDeviceClassic) || supportedT2.contains(T2Function.pairingWithClassOfDeviceLE)
@@ -43,6 +48,9 @@ public struct HeadphoneStatus: Equatable, Codable, Sendable {
     public var speakToChat: Bool?
     public var speakToChatDetail: SpeakToChatDetail?
     public var micMute: MicMuteSettings?
+    public var equalizer: Equalizer?
+    /// False while the headphones won't let the equalizer be changed, e.g. during a call.
+    public var equalizerAvailable: Bool?
 
     public init() {}
 

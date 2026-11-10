@@ -420,3 +420,69 @@ final class AmbientLevelView: NSView {
         onChange?(level, !ended)
     }
 }
+
+/// One band of the equalizer: what it is, a slider, and its level.
+final class BandSliderView: NSView {
+    /// `adjusting` is true while the slider is still being dragged.
+    var onChange: ((_ level: Int, _ adjusting: Bool) -> Void)?
+    private(set) var isDragging = false
+
+    private let nameLabel = NSTextField(labelWithString: "")
+    private let slider = NSSlider()
+    private let valueLabel = NSTextField(labelWithString: "")
+
+    init() {
+        super.init(frame: NSRect(x: 0, y: 0, width: MenuMetrics.width, height: 22))
+        autoresizingMask = [.width]
+        nameLabel.font = .monospacedDigitSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
+        nameLabel.textColor = .secondaryLabelColor
+        nameLabel.alignment = .right
+        slider.isContinuous = true
+        slider.controlSize = .small
+        slider.target = self
+        slider.action = #selector(moved)
+        valueLabel.font = .monospacedDigitSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
+        valueLabel.alignment = .right
+        [nameLabel, slider, valueLabel].forEach(addSubview)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    override func layout() {
+        super.layout()
+        let inset = MenuMetrics.inset, name: CGFloat = 34, value: CGFloat = 24, gap: CGFloat = 8
+        let middle = bounds.midY
+        nameLabel.frame = NSRect(x: inset, y: middle - 8, width: name, height: 16)
+        valueLabel.frame = NSRect(x: bounds.maxX - inset - value, y: middle - 8, width: value, height: 16)
+        let left = nameLabel.frame.maxX + gap
+        slider.frame = NSRect(x: left, y: middle - 10, width: valueLabel.frame.minX - gap - left, height: 20)
+    }
+
+    func configure(name: String, level: Int, range: ClosedRange<Int>, enabled: Bool) {
+        nameLabel.stringValue = name
+        slider.minValue = Double(range.lowerBound)
+        slider.maxValue = Double(range.upperBound)
+        slider.numberOfTickMarks = range.count
+        slider.allowsTickMarkValuesOnly = true
+        slider.isEnabled = enabled
+        slider.setAccessibilityLabel("\(name) band")
+        guard !isDragging else { return } // don't pull the knob out from under the pointer
+        slider.integerValue = level
+        show(level, enabled: enabled)
+    }
+
+    private func show(_ level: Int, enabled: Bool) {
+        valueLabel.stringValue = level > 0 ? "+\(level)" : "\(level)"
+        valueLabel.textColor = !enabled ? .disabledControlTextColor : level == 0 ? .secondaryLabelColor : .labelColor
+    }
+
+    @objc private func moved() {
+        let level = Int(slider.doubleValue.rounded())
+        // A continuous slider sends its last action on mouse-up.
+        let ended = NSApp.currentEvent?.type == .leftMouseUp
+        isDragging = !ended
+        show(level, enabled: true)
+        onChange?(level, !ended)
+    }
+}

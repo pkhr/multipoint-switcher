@@ -26,6 +26,15 @@ enum SharedState {
 
     static var status: HeadphoneStatus { snapshot?.status ?? HeadphoneStatus() }
 
+    /// The equalizer's presets, as the headphones listed them.
+    static var equalizerPresets: [EqualizerPreset] { snapshot?.capabilities?.equalizer?.presets ?? [] }
+
+    /// The app version that read the remembered capabilities.
+    static var capabilitiesVersion: String? {
+        get { defaults.string(forKey: "capabilitiesVersion") }
+        set { defaults.set(newValue, forKey: "capabilitiesVersion") }
+    }
+
     static var headphonesName: String? {
         get { defaults.string(forKey: nameKey) }
         set { defaults.set(newValue, forKey: nameKey) }
@@ -68,6 +77,10 @@ protocol HeadphoneCommandHandling: AnyObject {
     /// Moves a stepped setting on by one and returns what it is now, in words.
     func step(_ step: HeadphoneStep) async throws -> String
     func setDevice(address: String, connected: Bool) async throws
+    /// Selects an equalizer preset and returns its name.
+    func setEqualizerPreset(id: UInt8) async throws -> String
+    /// Moves to the next equalizer preset and returns its name.
+    func cycleEqualizerPreset() async throws -> String
 }
 
 @MainActor

@@ -23,6 +23,9 @@ final class MenuSnapshotTests: XCTestCase {
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {
             let suffix = appearance == .aqua ? "light" : "dark"
             try snapshot(menu, appearance: appearance).write(to: URL(fileURLWithPath: "\(directory)/menu-\(suffix).png"))
+            if let equalizer = menu.items.first(where: { $0.title.hasPrefix("Equalizer") })?.submenu {
+                try snapshot(equalizer, appearance: appearance).write(to: URL(fileURLWithPath: "\(directory)/equalizer-\(suffix).png"))
+            }
             if let microphone = menu.items.first(where: { $0.title == "Microphone" })?.submenu {
                 try snapshot(microphone, appearance: appearance).write(to: URL(fileURLWithPath: "\(directory)/microphone-\(suffix).png"))
             }

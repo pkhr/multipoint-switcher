@@ -3,13 +3,13 @@ import HeadphoneKit
 import IOBluetooth
 import MDRKit
 
-/// `Multipoint list | switch <device> | next | connect <device> | disconnect <device> | auto-switch on|off | nc …`
+/// `Multipoint list | switch <device> | next | connect <device> | disconnect <device> | auto-switch on|off | nc … | eq …`
 ///
 /// Each command connects, does its thing and disconnects, the same way the menu bar app does, so the two can be
 /// used side by side.
 @MainActor
 enum CommandLineTool {
-    static let commands: Set<String> = ["list", "switch", "next", "connect", "disconnect", "auto-switch", "nc", "mic",
+    static let commands: Set<String> = ["list", "switch", "next", "connect", "disconnect", "auto-switch", "nc", "eq", "mic",
                                         "query", "help", "--help", "-h"]
 
     static func run(_ rawArguments: [String]) -> Never {
@@ -130,6 +130,44 @@ enum CommandLineTool {
                 exit(controller.status.noiseControl?.mode == noise.mode ? 0 : 1)
             }
 
+        case "eq":
+            guard let info = controller.capabilities?.equalizer, var value = status.equalizer else {
+                fail("These headphones don't offer an equalizer.")
+            }
+            let words = operand.split(separator: " ").map(String.init)
+            if words.isEmpty {
+                printEqualizer(value, info, available: status.equalizerAvailable)
+                exit(0)
+            }
+            if words[0].lowercased() == "bands" {
+                // eq bands 0 0 2 -1 …: every band, as levels around flat. Goes to a custom preset.
+                let levels = words.dropFirst().compactMap { Int($0) }
+                guard info.isCustomizable else { fail("These headphones' equalizer has presets only.") }
+                guard levels.count == words.count - 1, levels.count == info.bandCount,
+                      levels.allSatisfy(info.levels.contains) else {
+                    fail("Give \(info.bandCount) levels from \(info.levels.lowerBound) to \(info.levels.upperBound), e.g.: eq bands "
+                         + info.bandLabels.map { _ in "0" }.joined(separator: " "))
+                }
+                for (band, level) in levels.enumerated() { controller.setEqualizerLevel(level, band: band) }
+                value = Equalizer(presetID: info.customPreset?.id ?? value.presetID, steps: levels.map { UInt8($0 + info.flatStep) })
+            } else {
+                let matches = info.presets.filter { $0.title.localizedCaseInsensitiveContains(operand) }
+                guard let preset = matches.first(where: { $0.title.caseInsensitiveCompare(operand) == .orderedSame })
+                        ?? (matches.count == 1 ? matches[0] : nil) else {
+                    fail(matches.isEmpty ? "No preset matches \"\(operand)\". Presets: \(info.presets.map(\.title).joined(separator: ", "))"
+                                         : "\"\(operand)\" matches several presets: \(matches.map(\.title).joined(separator: ", "))")
+                }
+                controller.selectEqualizerPreset(preset.id)
+                value = Equalizer(presetID: preset.id)
+            }
+            // Read it back from the headphones rather than trusting what was just sent.
+            controller.sync(.equalizer) { failure in
+                if let failure { fail(failure) }
+                guard let now = controller.status.equalizer else { fail("The headphones didn't report the equalizer.") }
+                printEqualizer(now, info, available: controller.status.equalizerAvailable)
+                exit(now.presetID == value.presetID && (value.steps.isEmpty || now.steps == value.steps) ? 0 : 1)
+            }
+
         case "mic":
             printMicrophone(status, headphonesAddress: headphonesAddress)
             exit(0)
@@ -217,6 +255,19 @@ enum CommandLineTool {
         }
     }
 
+    private static func printEqualizer(_ value: Equalizer, _ info: EqualizerInfo, available: Bool?) {
+        print("Equalizer: \(info.preset(value.presetID)?.title ?? EqualizerPreset(id: value.presetID).title)"
+              + (available == false ? " (can't be changed right now)" : ""))
+        let levels = value.levels(in: info)
+        if !levels.isEmpty {
+            let labels = info.bandLabels
+            print("  " + levels.enumerated().map { band, level in
+                "\(band < labels.count ? labels[band] : "\(band + 1)"): \(level > 0 ? "+" : "")\(level)"
+            }.joined(separator: "  "))
+        }
+        print("Presets: \(info.presets.map(\.title).joined(separator: ", "))")
+    }
+
     private static func printMicrophone(_ status: HeadphoneStatus, headphonesAddress: String) {
         let router = MicrophoneRouter()
         router.headphonesAddress = headphonesAddress
@@ -260,6 +311,7 @@ enum CommandLineTool {
           disconnect <name>         Ask the headphones to drop a device
           auto-switch [on|off]      Whether the headphones may switch sources on their own
           nc [on|ambient [1-20]|off]  Noise cancelling, ambient sound (optionally at a level), or neither
+          eq [<preset>|bands <levels…>]  Show the equalizer, pick a preset, or set every band
           mic                       Show the Mac's microphone, who uses the headphone mic, and mic settings
           query "t1|t2 <hex>, …"    Send raw protocol requests and print the replies (for exploring)
         """)

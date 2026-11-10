@@ -263,6 +263,26 @@ public final class HeadphoneController {
         change({ $0.micMute = settings }) { $0.setMicMute(settings) }
     }
 
+    // MARK: Equalizer
+
+    public func selectEqualizerPreset(_ id: UInt8) {
+        change({ $0.equalizer = Equalizer(presetID: id, steps: $0.equalizer?.steps ?? []) }) { $0.selectEqualizerPreset(id) }
+    }
+
+    /// Moves one band. Only custom presets can be changed, so from any other preset this starts a custom one from
+    /// the bands as they are.
+    /// - Parameter adjusting: true while a slider is being dragged; call once more with false when it's released.
+    public func setEqualizerLevel(_ level: Int, band: Int, adjusting: Bool = false) {
+        guard let info = capabilities?.equalizer, info.isCustomizable, var value = status.equalizer,
+              value.steps.indices.contains(band) else { return }
+        if info.preset(value.presetID)?.isCustom != true {
+            guard let custom = info.customPreset else { return }
+            value.presetID = custom.id
+        }
+        value.setLevel(level, band: band, in: info)
+        change({ $0.equalizer = value }) { $0.setEqualizer(value, adjusting: adjusting) }
+    }
+
     /// Shows the new value right away, sends it, and lets the headphones' read-back confirm or correct it.
     private func change(_ optimistic: (inout HeadphoneStatus) -> Void, _ send: @escaping (HeadphoneSession) -> Void) {
         let before = status

@@ -22,6 +22,9 @@ struct ContentView: View {
                         if let noise = store.status.noiseControl {
                             NoiseControlSection(noise: noise)
                         }
+                        if let info = store.capabilities?.equalizer, let equalizer = store.status.equalizer {
+                            EqualizerSection(info: info, value: equalizer)
+                        }
                         if !store.status.devices.isEmpty {
                             SourceSection()
                             OptionsSection()
@@ -336,6 +339,157 @@ private struct ModeTile: View {
         .buttonStyle(PressableStyle())
         .accessibilityLabel(mode.title)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+// MARK: Equalizer
+
+private struct EqualizerSection: View {
+    @Environment(HeadphoneStore.self) private var store
+    let info: EqualizerInfo
+    let value: Equalizer
+
+    var body: some View {
+        let available = store.status.equalizerAvailable != false
+        let levels = value.levels(in: info)
+        VStack(spacing: 10) {
+            SectionLabel(text: "Equalizer")
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal) {
+                    HStack(spacing: 8) {
+                        ForEach(info.presets) { preset in
+                            PresetChip(title: preset.title, isSelected: preset.id == value.presetID) {
+                                store.selectEqualizerPreset(preset.id)
+                            }
+                            .id(preset.id)
+                        }
+                    }
+                    .padding(.horizontal, 1)
+                    .padding(.vertical, 2)
+                }
+                .scrollIndicators(.hidden)
+                .onAppear { proxy.scrollTo(value.presetID, anchor: .center) }
+                .onChange(of: value.presetID) { _, id in
+                    withAnimation { proxy.scrollTo(id, anchor: .center) }
+                }
+            }
+            if info.isCustomizable, !levels.isEmpty {
+                let labels = info.bandLabels
+                HStack(alignment: .top, spacing: 0) {
+                    ForEach(Array(levels.enumerated()), id: \.offset) { band, level in
+                        BandSlider(label: band < labels.count ? labels[band] : "\(band + 1)", level: level, range: info.levels) { level, adjusting in
+                            store.setEqualizerLevel(level, band: band, adjusting: adjusting)
+                        }
+                    }
+                }
+                .card(padding: 12)
+            }
+            if !available {
+                Text("The headphones won't change the equalizer right now, for example during a call.")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.tertiaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 4)
+            } else if info.isCustomizable, info.preset(value.presetID)?.isCustom != true, let custom = info.customPreset {
+                Text("Moving a band switches to \(custom.title), starting from these levels.")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.tertiaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 4)
+            }
+        }
+        .disabled(!available)
+        .opacity(available ? 1 : 0.5)
+    }
+}
+
+private struct PresetChip: View {
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 14, weight: .semibold))
+                // Selected is the inverse: black on white.
+                .foregroundStyle(isSelected ? Color.black : Color.white.opacity(0.78))
+                .padding(.horizontal, 15)
+                .padding(.vertical, 10)
+                .background(isSelected ? Color.white : Theme.card, in: Capsule())
+                .overlay(Capsule().strokeBorder(isSelected ? .clear : Theme.hairline))
+        }
+        .buttonStyle(PressableStyle())
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+/// One band: a vertical slider that fills from the flat line toward the level.
+private struct BandSlider: View {
+    let label: String
+    let level: Int
+    let range: ClosedRange<Int>
+    /// The second argument is true while the finger is still down.
+    let onChange: (Int, Bool) -> Void
+    @State private var dragged: Int?
+
+    private let knob: CGFloat = 16
+
+    var body: some View {
+        let shown = dragged ?? level
+        VStack(spacing: 8) {
+            Text(shown > 0 ? "+\(shown)" : "\(shown)")
+                .font(.system(size: 11, weight: .medium))
+                .monospacedDigit()
+                .foregroundStyle(shown == 0 ? Theme.tertiaryText : .white)
+            GeometryReader { geometry in
+                let middle = geometry.size.width / 2
+                let y = position(of: shown, in: geometry.size.height)
+                let flat = position(of: 0, in: geometry.size.height)
+                ZStack {
+                    Capsule().fill(.white.opacity(0.13)).frame(width: 4)
+                    Capsule().fill(.white).frame(width: 4, height: abs(y - flat)).position(x: middle, y: (y + flat) / 2)
+                    Rectangle().fill(.white.opacity(0.3)).frame(width: 12, height: 1).position(x: middle, y: flat)
+                    Circle().fill(.white).frame(width: knob, height: knob)
+                        .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
+                        .position(x: middle, y: y)
+                }
+                .contentShape(Rectangle())
+                // Ahead of the page's own scrolling, so dragging a band doesn't scroll the page.
+                .highPriorityGesture(DragGesture(minimumDistance: 0)
+                    .onChanged { drag in
+                        let fraction = 1 - (drag.location.y - knob / 2) / (geometry.size.height - knob)
+                        let level = range.lowerBound + Int((min(max(fraction, 0), 1) * CGFloat(range.count - 1)).rounded())
+                        guard level != dragged else { return }
+                        dragged = level
+                        onChange(level, true)
+                    }
+                    .onEnded { _ in
+                        if let dragged { onChange(dragged, false) }
+                        dragged = nil
+                    })
+            }
+            .frame(height: 150)
+            Text(label)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(Theme.secondaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement()
+        .accessibilityLabel("\(label) band")
+        .accessibilityValue("\(shown)")
+        .accessibilityAdjustableAction { direction in
+            let next = level + (direction == .increment ? 1 : -1)
+            if range.contains(next) { onChange(next, false) }
+        }
+    }
+
+    /// Where a level sits on a track of this height: the top of the range at the top.
+    private func position(of level: Int, in height: CGFloat) -> CGFloat {
+        let fraction = CGFloat(level - range.lowerBound) / CGFloat(max(range.count - 1, 1))
+        return (1 - fraction) * (height - knob) + knob / 2
     }
 }
 

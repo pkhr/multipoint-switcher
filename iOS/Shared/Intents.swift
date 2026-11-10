@@ -273,3 +273,70 @@ struct SetDeviceConnectionIntent: SetValueIntent, HeadphoneIntent {
         return .result()
     }
 }
+
+// MARK: Equalizer
+
+/// One of the equalizer's presets, as the headphones listed them.
+struct EqualizerPresetEntity: AppEntity {
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "Equalizer Preset"
+    static let defaultQuery = EqualizerPresetQuery()
+
+    /// The protocol's preset number, as text.
+    let id: String
+    let name: String
+
+    init(_ preset: EqualizerPreset) {
+        id = String(preset.id)
+        name = preset.title
+    }
+
+    var presetID: UInt8? { UInt8(id) }
+    var displayRepresentation: DisplayRepresentation {
+        DisplayRepresentation(title: "\(name)", image: .init(named: "headphones.eq"))
+    }
+}
+
+/// Answers from the shared copy of the preset list, so it works in the widget extension too.
+struct EqualizerPresetQuery: EntityQuery {
+    func entities(for identifiers: [String]) async throws -> [EqualizerPresetEntity] {
+        SharedState.equalizerPresets.map(EqualizerPresetEntity.init).filter { identifiers.contains($0.id) }
+    }
+
+    func suggestedEntities() async throws -> [EqualizerPresetEntity] {
+        SharedState.equalizerPresets.map(EqualizerPresetEntity.init)
+    }
+}
+
+struct SetEqualizerPresetIntent: HeadphoneIntent {
+    static let title: LocalizedStringResource = "Set Equalizer Preset"
+    @available(iOS 26.0, *) static var supportedModes: IntentModes { .background }
+    @available(iOS 27.0, *) static var allowedExecutionTargets: IntentExecutionTargets { .main }
+    static let description = IntentDescription("Switches the headphones' equalizer to one of its presets.")
+
+    @Parameter(title: "Preset") var preset: EqualizerPresetEntity?
+
+    static var parameterSummary: some ParameterSummary { Summary("Set headphones' equalizer to \(\.$preset)") }
+
+    init() {}
+    init(preset: EqualizerPresetEntity?) { self.preset = preset }
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        // A control can't stop to ask, so a missing choice is an error rather than a question.
+        guard let id = preset?.presetID else { throw HeadphoneError("Choose a preset for this control first.") }
+        _ = try await HeadphoneCommands.current().setEqualizerPreset(id: id)
+        return .result()
+    }
+}
+
+struct CycleEqualizerPresetIntent: HeadphoneIntent {
+    static let title: LocalizedStringResource = "Next Equalizer Preset"
+    @available(iOS 26.0, *) static var supportedModes: IntentModes { .background }
+    @available(iOS 27.0, *) static var allowedExecutionTargets: IntentExecutionTargets { .main }
+    static let description = IntentDescription("Moves the headphones' equalizer to its next preset.")
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ReturnsValue<String> {
+        .result(value: try await HeadphoneCommands.current().cycleEqualizerPreset())
+    }
+}

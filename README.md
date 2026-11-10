@@ -25,6 +25,8 @@ protocol. Build it with Xcode onto your own phone, or through your own TestFligh
 
 - **Noise Control**: Noise Cancelling, Ambient Sound or Off, one click each. In ambient mode, a slider for how much
   outside sound comes in, *Adjust Level Automatically* and *Focus on Voice*.
+- **Equalizer**: the headphones' own presets (Bright, Vocal, Bass Boost, …) and a slider for each band. Moving a
+  band of a fixed preset switches to *Manual*, starting from that preset's levels.
 - **Audio Source**: the devices connected to the headphones. Click one to play from it; ⌥-click to disconnect it.
 - **⌃⌥⌘B from anywhere** flips the audio to the other connected device. The menu bar icon briefly shows the new source.
 - **Connect Another Device**: ask the headphones to connect to any device they're paired with.
@@ -65,8 +67,8 @@ The rest of the time it isn't connected and does nothing: no timers, no polling 
 
 ## iPhone app
 
-`iOS/Multipoint.xcodeproj` is the same thing for the iPhone: noise control, audio source, auto-switch and the
-headphones' mic settings on one screen. (Mac audio routing and the Mac microphone are Mac matters and aren't there.)
+`iOS/Multipoint.xcodeproj` is the same thing for the iPhone: noise control, the equalizer, audio source, auto-switch
+and the headphones' mic settings on one screen. (Mac audio routing and the Mac microphone are Mac matters and aren't there.)
 
 It adds **controls for Control Center**, the Lock Screen and the Action button, which work without opening the app.
 There is one for everything the app can do, each with its own symbol (the headphones, with what it controls drawn
@@ -75,16 +77,18 @@ around or inside them) and a line of text saying where things stand:
 | Group | Controls |
 |---|---|
 | Noise control | Noise Control (steps through the modes), Noise Cancelling, Ambient Sound, More Ambient, Less Ambient, Auto Ambient Level, Focus on Voice |
+| Equalizer | Equalizer (steps through the presets), Equalizer Preset |
 | Audio source | Audio Source (switch to the other device), Headphones on This iPhone, Play from Device, Connect Device, Auto-Switch |
 | Microphone | Hear Your Voice, Speak-to-Chat, Chat Sensitivity, Resume Music, Mute with Button, Mute Sound |
 
-Control Center has no sliders, so the ambient level moves in steps of two with More / Less. *Play from Device* and
-*Connect Device* ask which device when you add them.
+Control Center has no sliders, so the ambient level moves in steps of two with More / Less, and the equalizer's
+bands are only in the app. *Play from Device*, *Connect Device* and *Equalizer Preset* ask which one when you add
+them.
 
 The same actions are in Shortcuts and Siri ("Set Noise Control", "Switch Headphones to Other Device", "Turn Headphone
 Setting On or Off", …).
 
-<img src="docs/controls.png" alt="The eighteen Control Center controls and their symbols" width="720">
+<img src="docs/controls.png" alt="The twenty Control Center controls and their symbols" width="720">
 
 To install it without putting the iPhone in Developer Mode, use TestFlight: create an app record for the bundle ID
 in App Store Connect once, run `iOS/testflight.sh` to archive and upload, then add yourself to an internal testing
@@ -128,6 +132,8 @@ $M next
 $M connect "iPad"
 $M auto-switch off
 $M nc ambient 12         # noise control: on | ambient [level 1-20] | off; no argument shows it
+$M eq "bass boost"       # equalizer preset; no argument shows the presets and bands
+$M eq bands 2 1 0 0 0 0 0 1 2 3   # every band, as levels around flat
 $M mic                   # Mac mic, who's using the headphone mic, headphone mic settings
 $M list --debug          # dump raw protocol traffic
 $M query "t1 D0 D1 01"   # raw request → reply, for exploring the protocol
@@ -153,6 +159,8 @@ protocol called "MDR". Sound Connect uses it for everything, including the devic
 | Sidetone, a self-described "general setting" (table 1) | describe `D0 D1 01`, get `D6 D1`, set `D8 D1 00 <on>` |
 | Mic mute with headphone button + sound | `F6 0B` / `F8 0B <on> <sound>` |
 | Noise control get / set (table 1) | `66 19` / `68 19 <settled> <on> <ambient> <voice> <level> <auto> <sensitivity>` |
+| Equalizer presets and band layout (table 1) | `50 04 01` → `51 04 <bands> <steps> <count> {id len name}…` |
+| Equalizer get / set (table 1) | `56 00` → `57 00 <preset> <count> <step>…` / `58 00 <preset> <count> <step>…` (count 0 selects a preset) |
 
 In the settings messages, `00` means on and `01` off; noise control is the usual way round (`01` on). `19` is the
 noise-control layout of the XM6 and The ColleXion; the XM5's is `17`, without the last two bytes.
@@ -183,8 +191,9 @@ This app reimplements a small subset in Swift, so there's no C++ toolchain or de
 ## Notes
 
 - Tested live on a 1000X The ColleXion (firmware 1.3.0) on macOS 27: listing the devices, switching the source both
-  ways, and reading and writing the auto-switch and microphone settings. Connecting on demand, noise control and
-  the iPhone app were written afterwards and have so far only run against the simulated headphones.
+  ways, reading and writing the auto-switch and microphone settings, reading noise control, and connecting on
+  demand. The iPhone app connects to them too. Writing noise control, and the whole equalizer, have so far only run
+  against the simulated headphones.
 - macOS quirk: IOBluetooth silently drops an RFCOMM open that's sent before its internal session reports
   "powered on", right after a process starts. `BluetoothLink` waits briefly before the first open and retries opens
   that never complete.

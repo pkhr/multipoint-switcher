@@ -24,7 +24,8 @@ public final class HeadphoneSession: HeadphoneTransportDelegate {
         public static let noiseControl = Scope(rawValue: 2)
         /// Sidetone, Speak-to-Chat and mic mute.
         public static let settings = Scope(rawValue: 4)
-        public static let all: Scope = [.devices, .noiseControl, .settings]
+        public static let equalizer = Scope(rawValue: 8)
+        public static let all: Scope = [.devices, .noiseControl, .settings, .equalizer]
     }
 
     public private(set) var state: State = .connecting
@@ -57,7 +58,7 @@ public final class HeadphoneSession: HeadphoneTransportDelegate {
     private var writing: [Setting: Int] = [:]
 
     private enum Setting: Hashable {
-        case autoSwitch, noiseControl, sidetone, speakToChat, speakToChatDetail, micMute
+        case autoSwitch, noiseControl, sidetone, speakToChat, speakToChatDetail, micMute, equalizer
     }
 
     private struct Request {
@@ -123,6 +124,11 @@ public final class HeadphoneSession: HeadphoneTransportDelegate {
             if capabilities.supportsMicMute {
                 requests.append((MDRDataType.table2, MDRRequest.micMute, Self.isReply(MDRDataType.table2, 0xF7, 0x0B)))
             }
+        }
+        // Last, so that if these headphones turn out not to answer, nothing else waits behind it.
+        if scope.contains(.equalizer), capabilities.equalizer != nil {
+            requests.append((MDRDataType.table1, MDRRequest.equalizer, Self.isEqualizerReply(0x57)))
+            requests.append((MDRDataType.table1, MDRRequest.equalizerAvailability, Self.isEqualizerReply(0x53)))
         }
         guard !requests.isEmpty else { completion?(true); return }
         var allAnswered = true
@@ -237,6 +243,21 @@ public final class HeadphoneSession: HeadphoneTransportDelegate {
               readBack: MDRRequest.micMute, reply: Self.isReply(MDRDataType.table2, 0xF7, 0x0B))
     }
 
+    /// Selects an equalizer preset. The read-back brings that preset's bands.
+    public func selectEqualizerPreset(_ id: UInt8) {
+        guard capabilities?.equalizer != nil else { return }
+        write(.equalizer, MDRDataType.table1, MDRRequest.selectEqualizerPreset(id),
+              readBack: MDRRequest.equalizer, reply: Self.isEqualizerReply(0x57))
+    }
+
+    /// Sets the bands of a custom preset.
+    /// - Parameter adjusting: true while a slider is being dragged; send once more with false when it's released.
+    public func setEqualizer(_ value: Equalizer, adjusting: Bool = false) {
+        guard capabilities?.equalizer?.isCustomizable == true, !value.steps.isEmpty else { return }
+        write(.equalizer, MDRDataType.table1, MDRRequest.setEqualizer(value),
+              readBack: adjusting ? nil : MDRRequest.equalizer, reply: Self.isEqualizerReply(0x57))
+    }
+
     /// Sends a setting, then reads it back to confirm. Repeated writes of one setting collapse to the newest.
     private func write(_ setting: Setting, _ table: UInt8, _ payload: [UInt8], readBack: [UInt8]?,
                        reply: @escaping (UInt8, [UInt8]) -> Bool) {
@@ -277,7 +298,12 @@ public final class HeadphoneSession: HeadphoneTransportDelegate {
             if let info = self.protocolInfo, !info.hasTable2 {
                 return self.fail("These headphones don't support multipoint control")
             }
-            if self.capabilities != nil { return self.setState(.ready) }
+            if let known = self.capabilities {
+                // Capabilities remembered from before the app knew about the equalizer: ask about that once.
+                guard known.equalizerProbed != true, known.equalizerVariant != nil else { return self.setState(.ready) }
+                self.discovered = known
+                return self.describeEqualizer()
+            }
             self.send(MDRDataType.table1, MDRRequest.supportFunctions, reply: { type, payload in
                 type == MDRDataType.table1 && payload.first == 0x07
             })
@@ -290,12 +316,24 @@ public final class HeadphoneSession: HeadphoneTransportDelegate {
     /// The general settings name themselves ("SIDETONE_SETTING"); ask each one what it is.
     private func describeGeneralSettings() {
         let indexes = T1Function.generalSettings.filter(discovered.supportedT1.contains)
-        guard !indexes.isEmpty else { return finishHandshake() }
+        guard !indexes.isEmpty else { return describeEqualizer() }
         for index in indexes {
             send(MDRDataType.table1, MDRRequest.generalSettingInfo(index),
                  reply: Self.isReply(MDRDataType.table1, 0xD1, index)) { [weak self] _ in
-                if index == indexes.last { self?.finishHandshake() }
+                if index == indexes.last { self?.describeEqualizer() }
             }
+        }
+    }
+
+    /// The equalizer's presets and bands differ by model, so the headphones are asked for them.
+    private func describeEqualizer() {
+        guard let variant = discovered.equalizerVariant else {
+            discovered.equalizerProbed = true
+            return finishHandshake()
+        }
+        send(MDRDataType.table1, MDRRequest.equalizerInfo(variant), reply: Self.isEqualizerReply(0x51)) { [weak self] _ in
+            self?.discovered.equalizerProbed = true
+            self?.finishHandshake()
         }
     }
 
@@ -308,6 +346,13 @@ public final class HeadphoneSession: HeadphoneTransportDelegate {
     private static func isReply(_ table: UInt8, _ command: UInt8, _ inquiredType: UInt8) -> (UInt8, [UInt8]) -> Bool {
         { dataType, payload in
             dataType == table && payload.count >= 2 && payload[0] == command && payload[1] == inquiredType
+        }
+    }
+
+    /// A reply about the equalizer. The headphones may answer under any of the preset-equalizer types.
+    private static func isEqualizerReply(_ command: UInt8) -> (UInt8, [UInt8]) -> Bool {
+        { dataType, payload in
+            dataType == MDRDataType.table1 && payload.count >= 2 && payload[0] == command && [0x00, 0x02, 0x04].contains(payload[1])
         }
     }
 
@@ -451,6 +496,14 @@ public final class HeadphoneSession: HeadphoneTransportDelegate {
             if !isWriting(.speakToChatDetail) { status.speakToChatDetail = detail }
         case let .noiseControl(value, _):
             if !isWriting(.noiseControl) { status.noiseControl = value }
+        case let .equalizerInfo(info):
+            discovered.equalizer = info
+        case let .equalizer(value):
+            guard !isWriting(.equalizer) else { break }
+            // A notification that only names the new preset keeps the bands until they're read.
+            status.equalizer = value.steps.isEmpty ? Equalizer(presetID: value.presetID, steps: status.equalizer?.steps ?? []) : value
+        case let .equalizerAvailable(available):
+            status.equalizerAvailable = available
         case .other:
             break
         }
