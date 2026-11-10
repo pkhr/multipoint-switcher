@@ -25,8 +25,10 @@ protocol. Build it with Xcode onto your own phone, or through your own TestFligh
 
 - **Noise Control**: Noise Cancelling, Ambient Sound or Off, one click each. In ambient mode, a slider for how much
   outside sound comes in, *Adjust Level Automatically* and *Focus on Voice*.
-- **Equalizer**: the headphones' own presets (Bright, Vocal, Bass Boost, …) and a slider for each band. Moving a
-  band of a fixed preset switches to *Manual*, starting from that preset's levels.
+- **Equalizer**: the headphones' own presets (Heavy, Clear, Hard, Soft, …) and a slider for each band. Moving a
+  band of a fixed preset switches to *Manual*, starting from that preset's levels. The custom presets can be given
+  names of your own (*Rename…* in the menu, touch and hold on the iPhone); the headphones store only the bands, so
+  each app keeps its own names.
 - **Audio Source**: the devices connected to the headphones. Click one to play from it; ⌥-click to disconnect it.
 - **⌃⌥⌘B from anywhere** flips the audio to the other connected device. The menu bar icon briefly shows the new source.
 - **Connect Another Device**: ask the headphones to connect to any device they're paired with.
@@ -134,6 +136,7 @@ $M auto-switch off
 $M nc ambient 12         # noise control: on | ambient [level 1-20] | off; no argument shows it
 $M eq "bass boost"       # equalizer preset; no argument shows the presets and bands
 $M eq bands 2 1 0 0 0 0 0 1 2 3   # every band, as levels around flat
+$M eq rename custom 1 = Neutral   # your own name for a custom preset, kept on this Mac
 $M mic                   # Mac mic, who's using the headphone mic, headphone mic settings
 $M list --debug          # dump raw protocol traffic
 $M query "t1 D0 D1 01"   # raw request → reply, for exploring the protocol

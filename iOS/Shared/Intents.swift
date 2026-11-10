@@ -287,7 +287,7 @@ struct EqualizerPresetEntity: AppEntity {
 
     init(_ preset: EqualizerPreset) {
         id = String(preset.id)
-        name = preset.title
+        name = SharedState.presetNames.title(preset)
     }
 
     var presetID: UInt8? { UInt8(id) }

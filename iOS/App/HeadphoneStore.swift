@@ -169,6 +169,22 @@ final class HeadphoneStore: HeadphoneCommandHandling {
     func setSpeakToChatDetail(_ detail: SpeakToChatDetail) { controller.setSpeakToChatDetail(detail) }
     func setMicMute(_ settings: MicMuteSettings) { controller.setMicMute(settings) }
     func selectEqualizerPreset(_ id: UInt8) { controller.selectEqualizerPreset(id) }
+
+    /// Counts renames, so that views showing preset names redraw.
+    private(set) var presetNamesVersion = 0
+
+    /// What to call a preset: your name for a custom one, otherwise its own.
+    func title(of preset: EqualizerPreset) -> String {
+        _ = presetNamesVersion
+        return SharedState.presetNames.title(preset)
+    }
+
+    /// Names a custom preset. The headphones can't store names, so this is kept on the iPhone.
+    func rename(_ preset: EqualizerPreset, to name: String) {
+        SharedState.presetNames.setName(name, for: preset.id)
+        presetNamesVersion += 1
+        ControlCenter.shared.reloadAllControls()
+    }
     func setEqualizerLevel(_ level: Int, band: Int, adjusting: Bool) { controller.setEqualizerLevel(level, band: band, adjusting: adjusting) }
 
     // MARK: Commands from controls, Shortcuts and Siri
@@ -287,7 +303,7 @@ final class HeadphoneStore: HeadphoneCommandHandling {
         controller.selectEqualizerPreset(id)
         try await sync(.equalizer) // queued behind the write, so this is the headphones' answer
         guard controller.status.equalizer?.presetID == id else { throw HeadphoneError("The headphones didn't change the equalizer.") }
-        return preset.title
+        return SharedState.presetNames.title(preset)
     }
 
     func cycleEqualizerPreset() async throws -> String {

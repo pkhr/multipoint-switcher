@@ -187,7 +187,7 @@ struct FocusOnVoiceControl: ControlWidget {
 /// The current preset's name, as last read; nil until the app has read the equalizer.
 private func equalizerPresetTitle(_ status: HeadphoneStatus) -> String? {
     guard let id = status.equalizer?.presetID else { return nil }
-    return (SharedState.equalizerPresets.first { $0.id == id } ?? EqualizerPreset(id: id)).title
+    return SharedState.presetNames.title(SharedState.equalizerPresets.first { $0.id == id } ?? EqualizerPreset(id: id))
 }
 
 /// Shows the equalizer's preset; a tap moves to the next one.

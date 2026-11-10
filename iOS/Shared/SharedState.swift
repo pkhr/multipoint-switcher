@@ -26,6 +26,9 @@ enum SharedState {
 
     static var status: HeadphoneStatus { snapshot?.status ?? HeadphoneStatus() }
 
+    /// Your own names for the custom presets, kept on this iPhone and shared with the controls.
+    static var presetNames: EqualizerPresetNames { EqualizerPresetNames(defaults: defaults) }
+
     /// The equalizer's presets, as the headphones listed them.
     static var equalizerPresets: [EqualizerPreset] { snapshot?.capabilities?.equalizer?.presets ?? [] }
 

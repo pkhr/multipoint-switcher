@@ -348,6 +348,8 @@ private struct EqualizerSection: View {
     @Environment(HeadphoneStore.self) private var store
     let info: EqualizerInfo
     let value: Equalizer
+    @State private var renaming: EqualizerPreset?
+    @State private var newName = ""
 
     var body: some View {
         let available = store.status.equalizerAvailable != false
@@ -358,10 +360,19 @@ private struct EqualizerSection: View {
                 ScrollView(.horizontal) {
                     HStack(spacing: 8) {
                         ForEach(info.presets) { preset in
-                            PresetChip(title: preset.title, isSelected: preset.id == value.presetID) {
+                            PresetChip(title: store.title(of: preset), isSelected: preset.id == value.presetID) {
                                 store.selectEqualizerPreset(preset.id)
                             }
                             .id(preset.id)
+                            .contextMenu {
+                                // Only the presets you set yourself can carry a name of yours.
+                                if preset.isCustom {
+                                    Button("Rename…", systemImage: "pencil") {
+                                        newName = SharedState.presetNames.name(for: preset.id) ?? ""
+                                        renaming = preset
+                                    }
+                                }
+                            }
                         }
                     }
                     .padding(.horizontal, 1)
@@ -391,7 +402,7 @@ private struct EqualizerSection: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 4)
             } else if info.isCustomizable, info.preset(value.presetID)?.isCustom != true, let custom = info.customPreset {
-                Text("Moving a band switches to \(custom.title), starting from these levels.")
+                Text("Moving a band switches to \(store.title(of: custom)), starting from these levels.")
                     .font(.footnote)
                     .foregroundStyle(Theme.tertiaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -400,6 +411,15 @@ private struct EqualizerSection: View {
         }
         .disabled(!available)
         .opacity(available ? 1 : 0.5)
+        .alert("Rename \(renaming?.title ?? "Preset")", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+            TextField(renaming?.title ?? "Name", text: $newName)
+            Button("Rename") {
+                if let renaming { store.rename(renaming, to: newName) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The name is kept on this iPhone. The headphones still call it \(renaming?.title ?? "that"). Leave it empty to go back.")
+        }
     }
 }
 

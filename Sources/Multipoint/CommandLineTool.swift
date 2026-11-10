@@ -25,6 +25,8 @@ enum CommandLineTool {
         let operand = arguments.dropFirst().joined(separator: " ")
         if ["help", "--help", "-h"].contains(command) { usage() }
 
+        if command == "eq", operand.lowercased().hasPrefix("rename") { renamePreset(String(operand.dropFirst("rename".count))) }
+
         let remembered = UserDefaults.standard.string(forKey: AppController.headphonesDefaultsKey)
         guard let headphones = headphonesQuery.map(HeadphoneDirectory.find)
                 ?? HeadphoneDirectory.preferred(rememberedAddress: remembered) else {
@@ -148,14 +150,16 @@ enum CommandLineTool {
                     fail("Give \(info.bandCount) levels from \(info.levels.lowerBound) to \(info.levels.upperBound), e.g.: eq bands "
                          + info.bandLabels.map { _ in "0" }.joined(separator: " "))
                 }
+                // They go into the preset in use if it's a custom one, otherwise into Manual.
+                let target = info.preset(value.presetID)?.isCustom == true ? value.presetID : info.customPreset?.id ?? value.presetID
                 for (band, level) in levels.enumerated() { controller.setEqualizerLevel(level, band: band) }
-                value = Equalizer(presetID: info.customPreset?.id ?? value.presetID, steps: levels.map { UInt8($0 + info.flatStep) })
+                value = Equalizer(presetID: target, steps: levels.map { UInt8($0 + info.flatStep) })
             } else {
-                let matches = info.presets.filter { $0.title.localizedCaseInsensitiveContains(operand) }
-                guard let preset = matches.first(where: { $0.title.caseInsensitiveCompare(operand) == .orderedSame })
-                        ?? (matches.count == 1 ? matches[0] : nil) else {
-                    fail(matches.isEmpty ? "No preset matches \"\(operand)\". Presets: \(info.presets.map(\.title).joined(separator: ", "))"
-                                         : "\"\(operand)\" matches several presets: \(matches.map(\.title).joined(separator: ", "))")
+                let matches = presetNames.presets(matching: operand, in: info)
+                guard matches.count == 1, let preset = matches.first else {
+                    let titles = (matches.isEmpty ? info.presets : matches).map(presetNames.title).joined(separator: ", ")
+                    fail(matches.isEmpty ? "No preset matches \"\(operand)\". Presets: \(titles)"
+                                         : "\"\(operand)\" matches several presets: \(titles)")
                 }
                 controller.selectEqualizerPreset(preset.id)
                 value = Equalizer(presetID: preset.id)
@@ -255,8 +259,25 @@ enum CommandLineTool {
         }
     }
 
+    private static let presetNames = EqualizerPresetNames()
+
+    /// `eq rename custom 1 = Neutral`: a name of your own for a custom preset, kept on this Mac. Works without the
+    /// headphones, which have no part in it.
+    private static func renamePreset(_ text: String) -> Never {
+        let parts = text.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false).map { $0.trimmingCharacters(in: .whitespaces) }
+        let custom = EqualizerInfo(variant: .customizable, bandCount: 0, stepCount: 0, presets: (0xA0...0xA5).map { EqualizerPreset(id: $0) })
+        guard parts.count == 2, !parts[0].isEmpty else { fail("Usage: eq rename <custom preset> = <name>   (an empty name undoes it)") }
+        let matches = presetNames.presets(matching: parts[0], in: custom)
+        guard matches.count == 1, let preset = matches.first else {
+            fail("\"\(parts[0])\" isn't one custom preset. They are: \(custom.presets.prefix(3).map(presetNames.title).joined(separator: ", "))")
+        }
+        presetNames.setName(parts[1], for: preset.id)
+        print(parts[1].isEmpty ? "\(preset.title) has its own name again." : "\(preset.title) is now called \(presetNames.title(preset)) on this Mac.")
+        exit(0)
+    }
+
     private static func printEqualizer(_ value: Equalizer, _ info: EqualizerInfo, available: Bool?) {
-        print("Equalizer: \(info.preset(value.presetID)?.title ?? EqualizerPreset(id: value.presetID).title)"
+        print("Equalizer: \(presetNames.title(value.presetID, in: info))"
               + (available == false ? " (can't be changed right now)" : ""))
         let levels = value.levels(in: info)
         if !levels.isEmpty {
@@ -265,7 +286,7 @@ enum CommandLineTool {
                 "\(band < labels.count ? labels[band] : "\(band + 1)"): \(level > 0 ? "+" : "")\(level)"
             }.joined(separator: "  "))
         }
-        print("Presets: \(info.presets.map(\.title).joined(separator: ", "))")
+        print("Presets: \(info.presets.map(presetNames.title).joined(separator: ", "))")
     }
 
     private static func printMicrophone(_ status: HeadphoneStatus, headphonesAddress: String) {
@@ -312,6 +333,7 @@ enum CommandLineTool {
           auto-switch [on|off]      Whether the headphones may switch sources on their own
           nc [on|ambient [1-20]|off]  Noise cancelling, ambient sound (optionally at a level), or neither
           eq [<preset>|bands <levels…>]  Show the equalizer, pick a preset, or set every band
+          eq rename <preset> = <name>    Your own name for a custom preset, kept on this Mac
           mic                       Show the Mac's microphone, who uses the headphone mic, and mic settings
           query "t1|t2 <hex>, …"    Send raw protocol requests and print the replies (for exploring)
         """)

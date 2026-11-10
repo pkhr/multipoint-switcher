@@ -34,6 +34,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var iconFlash: Task<Void, Never>?
     private let audioRouter = AudioRouter()
     private let micRouter = MicrophoneRouter()
+    private let presetNames = EqualizerPresetNames()
     private var hostAddress = HeadphoneDirectory.hostAddress
     private let debug = ProcessInfo.processInfo.environment["MULTIPOINT_DEBUG"] != nil
     /// Simulated headphones, for trying the menu without real ones: `MULTIPOINT_DEMO=1`.
@@ -526,26 +527,54 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             entries.append(Menu.info("unavailable", "The headphones won't change it right now", symbol: "exclamationmark.triangle"))
         }
         for preset in info.presets {
+            let title = presetNames.title(preset)
             entries.append(Menu.view("preset.\(preset.id)", MenuRowView.init) { row in
-                row.configure(title: preset.title, accessory: preset.id == value.presetID ? .check : .none, enabled: available)
+                // A preset you've named also shows what the headphones (and Sony's app) call it.
+                row.configure(title: title, detail: title == preset.title ? nil : preset.title,
+                              accessory: preset.id == value.presetID ? .check : .none, enabled: available)
                 row.onClick = { controller.selectEqualizerPreset(preset.id) }
+            })
+        }
+        if let current = info.preset(value.presetID), current.isCustom {
+            entries.append(Menu.command("rename", "Rename “\(presetNames.title(current))”…") { [weak self] in
+                // After the menu has closed.
+                DispatchQueue.main.async { self?.rename(current) }
             })
         }
         let levels = value.levels(in: info)
         if info.isCustomizable, !levels.isEmpty {
             entries.append(Menu.separator("sep.bands"))
             let labels = info.bandLabels
+            let customTitle = info.customPreset.map(presetNames.title) ?? "a custom preset"
             for (band, level) in levels.enumerated() {
                 entries.append(Menu.view("band.\(band)", BandSliderView.init) { view in
                     view.configure(name: band < labels.count ? labels[band] : "\(band + 1)", level: level, range: info.levels, enabled: available)
                     view.toolTip = info.preset(value.presetID)?.isCustom == true ? nil
-                        : "Moving a band switches to \(info.customPreset?.title ?? "a custom preset"), starting from these levels."
+                        : "Moving a band switches to \(customTitle), starting from these levels."
                     view.onChange = { level, adjusting in controller.setEqualizerLevel(level, band: band, adjusting: adjusting) }
                 })
             }
         }
-        let title = "Equalizer: \(info.preset(value.presetID)?.title ?? EqualizerPreset(id: value.presetID).title)"
-        return renderer.submenu("equalizer", title, entries)
+        return renderer.submenu("equalizer", "Equalizer: \(presetNames.title(value.presetID, in: info))", entries)
+    }
+
+    /// Asks for a name for one of the custom presets. The headphones can't store it, so it's kept on this Mac.
+    private func rename(_ preset: EqualizerPreset) {
+        let alert = NSAlert()
+        alert.messageText = "Rename \(preset.title)"
+        alert.informativeText = "The name is kept on this Mac. The headphones, and other apps, still call it \(preset.title). "
+            + "Leave it empty to go back to that."
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
+        field.stringValue = presetNames.name(for: preset.id) ?? ""
+        field.placeholderString = preset.title
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Rename")
+        alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = field
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        presetNames.setName(field.stringValue, for: preset.id)
+        refreshUI()
     }
 
     private func toggleRow(_ key: String, _ title: String, on: Bool, enabled: Bool = true, toolTip: String? = nil,
