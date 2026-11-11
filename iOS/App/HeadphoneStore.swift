@@ -338,7 +338,7 @@ final class HeadphoneStore: HeadphoneCommandHandling {
 
     private func sync(_ scope: HeadphoneSession.Scope) async throws {
         accessoriesChanged()
-        guard isReachable else { throw HeadphoneError("The headphones aren't connected to this iPhone.") }
+        guard isReachable else { throw HeadphoneError("The headphones aren't connected to this \(SharedState.deviceName).") }
         let failure: String? = await withCheckedContinuation { continuation in
             controller.sync(scope) { continuation.resume(returning: $0) }
         }

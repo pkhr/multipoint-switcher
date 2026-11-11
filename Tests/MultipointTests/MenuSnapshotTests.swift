@@ -40,6 +40,32 @@ final class MenuSnapshotTests: XCTestCase {
         app.menuDidClose(menu)
     }
 
+    /// Draws the About window's contents the same way.
+    func testRenderAbout() throws {
+        guard let directory = ProcessInfo.processInfo.environment["MULTIPOINT_SNAPSHOT_DIR"] else {
+            throw XCTSkip("Set MULTIPOINT_SNAPSHOT_DIR to render the About window")
+        }
+        _ = NSApplication.shared
+        let photo = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("iOS/App/Assets.xcassets/Headphones.imageset/Headphones.png")
+        let view = AboutView(photo: NSImage(contentsOf: photo))
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: view.fittingSize), styleMask: .borderless,
+                              backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.contentView = view
+        view.layoutSubtreeIfNeeded()
+        let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(to: URL(fileURLWithPath: "\(directory)/about.png"))
+
+        // And the real window opens, sized to its contents.
+        AboutWindowController.shared.show()
+        let about = try XCTUnwrap(AboutWindowController.shared.window)
+        XCTAssertTrue(about.isVisible)
+        XCTAssertEqual(about.contentView?.frame.width, AboutView.width)
+        about.close()
+    }
+
     private func snapshot(_ menu: NSMenu, appearance: NSAppearance.Name) throws -> Data {
         let width = MenuMetrics.width
         var rows: [NSView] = []

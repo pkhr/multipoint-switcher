@@ -7,43 +7,29 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
-        ZStack {
-            Theme.backdrop
-            ScrollView {
-                VStack(spacing: 22) {
-                    Header()
-                    Hero()
-                    if !store.isReachable {
-                        NotConnectedCard()
-                    } else {
-                        if case let .failed(reason) = store.link {
-                            FailureCard(reason: reason)
+        GeometryReader { geometry in
+            // Wide enough (an iPad, unless it's sharing the screen): the headphones stay on the left and the
+            // settings scroll beside them. Otherwise everything is one scrolling page.
+            let isWide = geometry.size.width >= 800
+            ZStack {
+                Theme.backdrop(fullHeight: isWide)
+                if isWide {
+                    wideLayout(geometry.size)
+                } else {
+                    ScrollView {
+                        VStack(spacing: 22) {
+                            Header()
+                            Hero()
+                            if store.isReachable { noiseSections; deviceSections } else { NotConnectedCard() }
                         }
-                        if let noise = store.status.noiseControl {
-                            NoiseControlSection(noise: noise)
-                        }
-                        if let info = store.capabilities?.equalizer, let equalizer = store.status.equalizer {
-                            EqualizerSection(info: info, value: equalizer)
-                        }
-                        if !store.status.devices.isEmpty {
-                            SourceSection()
-                            OptionsSection()
-                        }
-                        MicrophoneSection()
-                        if store.capabilities != nil {
-                            Text("To change these without opening the app, add Multipoint's controls to Control Center: swipe down from the top-right corner, touch and hold an empty area, then tap Add a Control.")
-                                .font(.footnote)
-                                .foregroundStyle(Theme.tertiaryText)
-                                .padding(.horizontal, 4)
-                        }
+                        .padding(.horizontal, 18)
+                        .padding(.bottom, 28)
+                        .frame(maxWidth: 560)
+                        .frame(maxWidth: .infinity)
                     }
+                    .scrollIndicators(.hidden)
                 }
-                .padding(.horizontal, 18)
-                .padding(.bottom, 28)
-                .frame(maxWidth: 560)
-                .frame(maxWidth: .infinity)
             }
-            .scrollIndicators(.hidden)
         }
         .tint(.white)
         .toggleStyle(MonoToggleStyle())
@@ -55,6 +41,73 @@ struct ContentView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(store.notice ?? "")
+        }
+    }
+}
+
+extension ContentView {
+    private func wideLayout(_ size: CGSize) -> some View {
+        let heroWidth = min(size.width * 0.4, 500)
+        let settingsWidth = size.width - heroWidth
+        return HStack(spacing: 0) {
+            VStack(spacing: 24) {
+                Header()
+                Hero(photoHeight: min(size.height * 0.48, 520))
+            }
+            .padding(.horizontal, 28)
+            .frame(width: heroWidth)
+            .frame(maxHeight: .infinity)
+
+            ScrollView {
+                Group {
+                    if !store.isReachable {
+                        NotConnectedCard().frame(maxWidth: 520)
+                    } else if settingsWidth >= 780 {
+                        // Room for two columns: sound on one side, devices and the microphone on the other.
+                        HStack(alignment: .top, spacing: 24) {
+                            VStack(spacing: 22) { noiseSections }
+                            VStack(spacing: 22) { deviceSections }
+                        }
+                    } else {
+                        VStack(spacing: 22) { noiseSections; deviceSections }.frame(maxWidth: 640)
+                    }
+                }
+                .padding(.horizontal, 28)
+                .padding(.vertical, 32)
+                .frame(maxWidth: .infinity)
+            }
+            .scrollIndicators(.hidden)
+            .background(.black.opacity(0.45))
+            .overlay(alignment: .leading) { Rectangle().fill(Theme.hairline).frame(width: 1).ignoresSafeArea() }
+        }
+    }
+
+    /// What the headphones do to the sound.
+    @ViewBuilder private var noiseSections: some View {
+        if case let .failed(reason) = store.link {
+            FailureCard(reason: reason)
+        }
+        if let noise = store.status.noiseControl {
+            NoiseControlSection(noise: noise)
+        }
+        if let info = store.capabilities?.equalizer, let equalizer = store.status.equalizer {
+            EqualizerSection(info: info, value: equalizer)
+        }
+    }
+
+    /// Where they play from, and their microphone.
+    @ViewBuilder private var deviceSections: some View {
+        if !store.status.devices.isEmpty {
+            SourceSection()
+            OptionsSection()
+        }
+        MicrophoneSection()
+        if store.capabilities != nil {
+            Text("To change these without opening the app, add Multipoint's controls to Control Center: swipe down from the top-right corner, touch and hold an empty area, then tap Add a Control.")
+                .font(.footnote)
+                .foregroundStyle(Theme.tertiaryText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 4)
         }
     }
 }
@@ -102,6 +155,7 @@ private struct Header: View {
 /// The photograph of the headphones, with the two things you change most right under it.
 private struct Hero: View {
     @Environment(HeadphoneStore.self) private var store
+    var photoHeight: CGFloat = 370
 
     var body: some View {
         let noise = store.isReachable ? store.status.noiseControl : nil
@@ -109,12 +163,12 @@ private struct Hero: View {
             Image("Headphones")
                 .resizable()
                 .scaledToFit()
-                .frame(maxHeight: 370)
+                .frame(maxHeight: photoHeight)
                 .background {
                     // A pool of studio light on the backdrop, so the black headphones keep their outline.
                     RadialGradient(colors: [.white.opacity(0.17), .white.opacity(0.05), .clear], center: .center,
-                                   startRadius: 10, endRadius: 230)
-                        .frame(width: 460, height: 460)
+                                   startRadius: 10, endRadius: photoHeight * 0.62)
+                        .frame(width: photoHeight * 1.24, height: photoHeight * 1.24)
                 }
                 .saturation(0)
                 .opacity(store.isReachable ? 1 : 0.35)
@@ -189,7 +243,7 @@ private struct NotConnectedCard: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            Text("Connect your Sony headphones to this iPhone in Settings › Bluetooth. If Sound Connect is open, close it: only one app can control the headphones at a time.")
+            Text("Connect your Sony headphones to this \(SharedState.deviceName) in Settings › Bluetooth. If Sound Connect is open, close it: only one app can control the headphones at a time.")
                 .font(.subheadline)
                 .foregroundStyle(Theme.secondaryText)
                 .multilineTextAlignment(.center)
@@ -349,6 +403,7 @@ private struct EqualizerSection: View {
     let info: EqualizerInfo
     let value: Equalizer
     @State private var renaming: EqualizerPreset?
+    @State private var shownPreset: UInt8?
     @State private var newName = ""
 
     var body: some View {
@@ -356,33 +411,34 @@ private struct EqualizerSection: View {
         let levels = value.levels(in: info)
         VStack(spacing: 10) {
             SectionLabel(text: "Equalizer")
-            ScrollViewReader { proxy in
-                ScrollView(.horizontal) {
-                    HStack(spacing: 8) {
-                        ForEach(info.presets) { preset in
-                            PresetChip(title: store.title(of: preset), isSelected: preset.id == value.presetID) {
-                                store.selectEqualizerPreset(preset.id)
-                            }
-                            .id(preset.id)
-                            .contextMenu {
-                                // Only the presets you set yourself can carry a name of yours.
-                                if preset.isCustom {
-                                    Button("Rename…", systemImage: "pencil") {
-                                        newName = SharedState.presetNames.name(for: preset.id) ?? ""
-                                        renaming = preset
-                                    }
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    ForEach(info.presets) { preset in
+                        PresetChip(title: store.title(of: preset), isSelected: preset.id == value.presetID) {
+                            store.selectEqualizerPreset(preset.id)
+                        }
+                        .id(preset.id)
+                        .contextMenu {
+                            // Only the presets you set yourself can carry a name of yours.
+                            if preset.isCustom {
+                                Button("Rename…", systemImage: "pencil") {
+                                    newName = SharedState.presetNames.name(for: preset.id) ?? ""
+                                    renaming = preset
                                 }
                             }
                         }
                     }
-                    .padding(.horizontal, 1)
-                    .padding(.vertical, 2)
                 }
-                .scrollIndicators(.hidden)
-                .onAppear { proxy.scrollTo(value.presetID, anchor: .center) }
-                .onChange(of: value.presetID) { _, id in
-                    withAnimation { proxy.scrollTo(id, anchor: .center) }
-                }
+                .padding(.horizontal, 1)
+                .padding(.vertical, 2)
+                .scrollTargetLayout()
+            }
+            .scrollIndicators(.hidden)
+            // Keeps the preset in use in view. (Asking a reader to scroll to it would scroll the page as well.)
+            .scrollPosition(id: $shownPreset, anchor: .center)
+            .onAppear { shownPreset = value.presetID }
+            .onChange(of: value.presetID) { _, id in
+                withAnimation { shownPreset = id }
             }
             if info.isCustomizable, !levels.isEmpty {
                 let labels = info.bandLabels
@@ -418,7 +474,7 @@ private struct EqualizerSection: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("The name is kept on this iPhone. The headphones still call it \(renaming?.title ?? "that"). Leave it empty to go back.")
+            Text("The name is kept on this \(SharedState.deviceName). The headphones still call it \(renaming?.title ?? "that"). Leave it empty to go back.")
         }
     }
 }
@@ -524,7 +580,7 @@ private struct SourceSection: View {
         VStack(spacing: 10) {
             SectionLabel(text: "Audio Source")
             ForEach(status.connectedDevices) { device in
-                DeviceCard(device: device, detail: device.address == thisPhone?.address ? "This iPhone" : "Connected",
+                DeviceCard(device: device, detail: device.address == thisPhone?.address ? "This \(SharedState.deviceName)" : "Connected",
                            isBusy: store.busyDevices.contains(device.address)) {
                     store.play(from: device)
                 }
@@ -625,9 +681,9 @@ private struct OptionsSection: View {
                     RowDivider()
                 }
                 HStack {
-                    SettingLabel(title: "This iPhone", detail: "For the Control Center toggle")
+                    SettingLabel(title: "This \(SharedState.deviceName)", detail: "For the Control Center toggle")
                     Spacer()
-                    Picker("This iPhone", selection: $store.thisPhoneAddress) {
+                    Picker("This \(SharedState.deviceName)", selection: $store.thisPhoneAddress) {
                         Text(automaticLabel).tag(String?.none)
                         ForEach(store.status.devices) { device in
                             Text(device.name).tag(String?.some(device.address))
@@ -642,7 +698,7 @@ private struct OptionsSection: View {
     }
 
     private var automaticLabel: String {
-        let phones = store.status.devices.filter { $0.kind == .phone }
+        let phones = SharedState.candidatesForThisDevice(in: store.status)
         return phones.count == 1 ? "Automatic (\(phones[0].name))" : "Not Set"
     }
 }

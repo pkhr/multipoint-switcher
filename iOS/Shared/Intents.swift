@@ -147,7 +147,7 @@ struct SwitchToDeviceIntent: HeadphoneIntent {
 
 /// For the "This iPhone" toggle: on brings the audio here, off hands it to the other device.
 struct PlayOnThisPhoneIntent: SetValueIntent, HeadphoneIntent {
-    static let title: LocalizedStringResource = "Play Headphones from This iPhone"
+    static let title: LocalizedStringResource = "Play Headphones from This Device"
     @available(iOS 26.0, *) static var supportedModes: IntentModes { .background }
     @available(iOS 27.0, *) static var allowedExecutionTargets: IntentExecutionTargets { .main }
     static let isDiscoverable = false
@@ -159,7 +159,7 @@ struct PlayOnThisPhoneIntent: SetValueIntent, HeadphoneIntent {
         let commands = try HeadphoneCommands.current()
         if value {
             guard let phone = SharedState.thisPhone(in: SharedState.status) else {
-                throw HeadphoneError("Open Multipoint and choose which device is this iPhone.")
+                throw HeadphoneError("Open Multipoint and choose which device is this \(SharedState.deviceName).")
             }
             try await commands.switchPlayback(toAddress: phone.address)
         } else {

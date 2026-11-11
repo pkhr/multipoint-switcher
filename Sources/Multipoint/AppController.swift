@@ -716,6 +716,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             })
         }
         entries.append(Menu.separator("sep.quit"))
+        entries.append(Menu.command("about", "About Multipoint") {
+            // After the menu has closed.
+            DispatchQueue.main.async { AboutWindowController.shared.show() }
+        })
         entries.append(Menu.command("quit", "Quit Multipoint", keyEquivalent: "q") { NSApp.terminate(nil) })
         return entries
     }

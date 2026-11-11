@@ -248,12 +248,13 @@ struct ThisPhoneControl: ControlWidget {
             let playing = status.playingDevice
             let isHere = playing != nil && playing?.address == SharedState.thisPhone(in: status)?.address
             ControlWidgetToggle("Headphones", isOn: isHere, action: PlayOnThisPhoneIntent()) { isOn in
-                Label(isOn ? "On This iPhone" : playing.map { "On \($0.name)" } ?? "Elsewhere", image: "headphones.on.phone")
+                Label(isOn ? "On This \(SharedState.deviceName)" : playing.map { "On \($0.name)" } ?? "Elsewhere",
+                      image: SharedState.deviceName == "iPad" ? "headphones.on.tablet" : "headphones.on.phone")
             }
             .tint(onTint)
         }
-        .displayName("Headphones on This iPhone")
-        .description("Bring the headphones' audio to this iPhone, or hand it back. Shows where it is now.")
+        .displayName("Headphones on This Device")
+        .description("Bring the headphones' audio to this iPhone or iPad, or hand it back. Shows where it is now.")
     }
 }
 

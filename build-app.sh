@@ -11,6 +11,8 @@ cp "$(swift build -c release --show-bin-path)/Multipoint" "$APP/Contents/MacOS/M
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 mkdir -p "$APP/Contents/Resources"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+# The picture of the headphones, for the About window. The iPhone app's copy is the original.
+cp iOS/App/Assets.xcassets/Headphones.imageset/Headphones.png "$APP/Contents/Resources/Headphones.png"
 # macOS ties the Bluetooth permission to the signature. An ad-hoc signature changes with every build, so each
 # rebuild asks again; a real identity (override with SIGN_IDENTITY, or SIGN_IDENTITY=- for ad-hoc) keeps it.
 IDENTITY="${SIGN_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null \

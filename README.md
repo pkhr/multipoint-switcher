@@ -52,7 +52,7 @@ protocol. Build it with Xcode onto your own phone, or through your own TestFligh
 - **Microphone ▸ Headphones**: the headphones' own mic settings, without Sound Connect: *Hear Your Voice on Calls*
   (sidetone), *Speak-to-Chat* with its sensitivity and how soon the music resumes, and *Mute Mic with Headphone
   Button* with its mute sound. Only what your model reports is shown.
-- Connect or disconnect the Mac itself, and open at login.
+- Connect or disconnect the Mac itself, and open at login. *About Multipoint* has a short guide.
 
 ### It doesn't hold on to the headphones
 
@@ -69,8 +69,9 @@ The rest of the time it isn't connected and does nothing: no timers, no polling 
 
 ## iPhone app
 
-`iOS/Multipoint.xcodeproj` is the same thing for the iPhone: noise control, the equalizer, audio source, auto-switch
-and the headphones' mic settings on one screen. (Mac audio routing and the Mac microphone are Mac matters and aren't there.)
+`iOS/Multipoint.xcodeproj` is the same thing for the iPhone and iPad: noise control, the equalizer, audio source,
+auto-switch and the headphones' mic settings on one screen. On an iPad the headphones stay on the left and the
+settings scroll beside them, in two columns when there's room. (Mac audio routing and the Mac microphone are Mac matters and aren't there.)
 
 It adds **controls for Control Center**, the Lock Screen and the Action button, which work without opening the app.
 There is one for everything the app can do, each with its own symbol (the headphones, with what it controls drawn

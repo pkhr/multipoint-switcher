@@ -1,5 +1,6 @@
 import Foundation
 import HeadphoneKit
+import UIKit
 import MDRKit
 
 /// What the app last learned from the headphones, kept where the Control Center controls can read it.
@@ -43,17 +44,26 @@ enum SharedState {
         set { defaults.set(newValue, forKey: nameKey) }
     }
 
-    /// Which entry of the headphones' device list is this iPhone. iOS doesn't tell apps its Bluetooth address, so
-    /// it's the list's only phone unless the user picked another in the app.
+    /// Which entry of the headphones' device list is this iPhone or iPad. iOS doesn't tell apps its Bluetooth
+    /// address, so it's the list's only phone (or tablet) unless the user picked another in the app.
     static var thisPhoneAddress: String? {
         get { defaults.string(forKey: thisPhoneKey) }
         set { defaults.set(newValue, forKey: thisPhoneKey) }
     }
 
+    /// "iPhone" or "iPad": what this device is, for wording.
+    static var deviceName: String { UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone" }
+
+    /// The devices in the headphones' list that could be this one, going by its kind.
+    static func candidatesForThisDevice(in status: HeadphoneStatus) -> [PairedDevice] {
+        let kind: DeviceKind = UIDevice.current.userInterfaceIdiom == .pad ? .tablet : .phone
+        return status.devices.filter { $0.kind == kind }
+    }
+
     static func thisPhone(in status: HeadphoneStatus) -> PairedDevice? {
         if let chosen = thisPhoneAddress, let device = status.device(matching: chosen) { return device }
-        let phones = status.devices.filter { $0.kind == .phone }
-        return phones.count == 1 ? phones[0] : nil
+        let candidates = candidatesForThisDevice(in: status)
+        return candidates.count == 1 ? candidates[0] : nil
     }
 }
 

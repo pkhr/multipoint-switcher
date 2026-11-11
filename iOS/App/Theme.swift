@@ -12,13 +12,15 @@ enum Theme {
     static let tertiaryText = Color.white.opacity(0.36)
     static let cardShape = RoundedRectangle(cornerRadius: 20, style: .continuous)
 
-    static var backdrop: some View {
+    /// - Parameter fullHeight: the gradient runs the whole height, for the wide layout where the photo stays put.
+    ///   Otherwise it covers the top of the page, behind the photo, and the rest is black.
+    static func backdrop(fullHeight: Bool = false) -> some View {
         ZStack {
             Color.black
             LinearGradient(stops: [.init(color: backdropTop, location: 0), .init(color: Color(white: 0.07), location: 0.62),
                                    .init(color: backdropBottom, location: 1)],
                            startPoint: .top, endPoint: .bottom)
-                .frame(height: 620)
+                .frame(height: fullHeight ? nil : 620)
                 .frame(maxHeight: .infinity, alignment: .top)
         }
         .ignoresSafeArea()
