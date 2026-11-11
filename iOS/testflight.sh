@@ -1,7 +1,7 @@
 #!/bin/bash
 # Archives the iPhone app and uploads it to App Store Connect for TestFlight.
-# The app record (bundle ID dev.pkhri.Multipoint.iOS) must already exist there. Each upload gets the next build
-# number automatically.
+# The app record (bundle ID dev.pkhri.Multipoint.iOS) must already exist there. Each archive's build number is the
+# date and time it was made, so builds sort by age in TestFlight whatever their version.
 #
 # Signs in with the Apple Account in Xcode › Settings › Accounts. That session expires now and then; to avoid it,
 # create an App Store Connect API key (Users and Access › Integrations) and set
@@ -18,6 +18,7 @@ fi
 
 if [[ "${1:-}" != "upload" ]]; then
   xcodebuild -project Multipoint.xcodeproj -scheme Multipoint -configuration Release \
+    CURRENT_PROJECT_VERSION="$(date +%Y%m%d.%H%M)" \
     -destination 'generic/platform=iOS' -archivePath "$ARCHIVE" -allowProvisioningUpdates ${AUTH[@]+"${AUTH[@]}"} archive | tail -1
 fi
 xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportOptionsPlist Config/ExportOptions.plist \
